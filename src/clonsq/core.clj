@@ -15,46 +15,39 @@
            bs/to-string
            json/parse-string))
 
-(def wtf (atom []))
-(defmulti handle-message (fn [msg] (get-in msg [:data :body])))
-(defmethod handle-message "_heartbeat_" [_] "NOP\n")
-(defmethod handle-message "OK" [_])
-(defmethod handle-message :default [msg]
-  (swap! wtf conj msg)
-  (println "UNKNOWN MESSAGE" msg))
+(defn err-handler [msg]
+  (prn "ERROR" msg))
 
-(defmulti handle-input (fn [_ input] (class input)))
-(defmethod handle-input ByteBuf [stream buf]
-  (when-let [response (handle-message (proto/decode buf))]
-    (s/put! stream response)))
-(defmethod handle-input :default [stream input]
-  (println "Unknown input!" input))
+(defn response-handler [response-stream msg]
+  (condp = (get-in msg [:data :body])
+    "_heartbeat_" (do (s/put! response-stream (proto/encode :nop))
+                      (prn "heartbeat" msg))
+    "OK" (prn "OK", msg)
+    (prn "Unexpected message" msg)))
 
-(defn connect [{:strs [broadcast_address tcp_port]}]
-  (d/let-flow [stream (tcp/client {:host broadcast_address :port tcp_port})]
-    (s/put! stream "  V2")
-    stream))
+(defn data-type= [t]
+  (fn [msg] (-> msg
+                (get-in [:data :type])
+                (= t))))
 
-(comment
-  (def foo (d/let-flow [response (lookup "http://localhost:4161" "test")
-               producer (get-in response ["data" "producers" 0])
-               stream (connect producer)]
-    (s/consume (partial handle-input stream) stream)
-    stream))
+(defn connect [{:keys [lookupd-http-address topic channel max-in-flight handler]}]
+  (d/let-flow [lookup-response (lookup lookupd-http-address topic)
+               producer (get-in lookup-response ["data" "producers" 0])
+               tcp-stream (tcp/client {:host (get producer "broadcast_address")
+                                       :port (get producer "tcp_port")})
+               decoded-input-stream (s/map proto/decode tcp-stream)
+               responses (s/filter (data-type= :response) decoded-input-stream)
+               messages (->> decoded-input-stream
+                             (s/filter (data-type= :message))
+                             (s/map #(dissoc (:data %) :type)))
+               errors (s/filter (data-type= :error) decoded-input-stream)]
+    (s/put! tcp-stream (proto/encode :magic-id))
+    (s/put! tcp-stream (proto/encode :subscribe topic channel))
+    (s/put! tcp-stream (proto/encode :ready max-in-flight))
+    (s/consume (partial response-handler tcp-stream) responses)
+    (s/consume err-handler errors)
+    (s/consume (partial handler tcp-stream) messages)
+    tcp-stream))
 
-  (s/put! @foo "SUB test clonsq \n")
-  (s/put! @foo "RDY 1\n")
-  (s/put! @foo "CLS\n")
-  (d/chain (s/take! stream)
-           bs/to-string
-           prn)
-  (def stream *1)
-
-  ; a lookup response
-  {"status_code" 200, "status_txt" "OK", "data" {"channels" [],
-                                                 "producers" [{"remote_address" "127.0.0.1:56958",
-                                                               "hostname" "fluorine-2.local",
-                                                               "broadcast_address" "fluorine-2.local",
-                                                               "tcp_port" 4150,
-                                                               "http_port" 4151,
-                                                               "version" "0.2.30"}]}})
+(defn finish [msg conn]
+  (s/put! conn (proto/encode :fin (:id msg))))

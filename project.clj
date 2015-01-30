@@ -6,4 +6,5 @@
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [aleph "0.4.0-beta1"]
                  [cheshire "5.4.0"]
-                 [gloss "0.2.4"]])
+                 [gloss "0.2.4"]]
+   :profiles {:dev {:resource-paths ["examples"]}})
