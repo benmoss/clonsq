@@ -24,15 +24,15 @@
           (vals args)))
 
 (defn -main [& args]
-  (let [defaults {"--max-in-flight" 200
-                  "--total-messages" 0}
-        args (->> (apply hash-map args)
-                  (merge defaults)
-                  normalize-args)]
-    (when (not (:topic args))
-      (println "--topic is required")
+  (let [args (apply hash-map args)
+        required-args ["--topic" "--lookupd-http-address"]
+        default-args {"--max-in-flight" 200
+                      "--total-messages" 0}
+        normalized (->> args
+                        (merge default-args)
+                        normalize-args)]
+    (when-let [missing-args (seq (remove (partial contains? args) required-args))]
+      (doseq [arg-name missing-args]
+        (println (str arg-name " is required")))
       (System/exit 1))
-    (when (not (:lookupd-http-address args))
-      (println "--lookupd-http-address is required")
-      (System/exit 1))
-    (run args)))
+    (run normalized)))

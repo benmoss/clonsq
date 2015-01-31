@@ -1,14 +1,21 @@
 # clonsq
 
-A Clojure library designed to ... well, that part is up to you.
+An in-progress Clojure client library for [NSQ](http://nsq.io/).
 
 ## Usage
 
-FIXME
+Examples are available in [the examples directory](/examples) and
+can be run via Leiningen (`lein run -m nsq-tail`).
+
+## TODOS
+
+- Update ready state after messages are processed
+- Handle more than one connection, round-robin between them
+- Publishing
 
 ## License
 
-Copyright © 2014 FIXME
+Copyright © 2015 Ben Moss
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
