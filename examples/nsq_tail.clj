@@ -36,10 +36,3 @@
       (println "--lookupd-http-address is required")
       (System/exit 1))
     (run args)))
-
-(comment
-  (def conn (-main "--lookupd-http-address" "http://localhost:4161" "--topic" "test" "--channel" "test"))
-  (manifold.stream/put! @conn "CLS\n")
-  (manifold.stream/close! @conn)
-
-  )
