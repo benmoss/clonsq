@@ -12,6 +12,7 @@ can be run via Leiningen (`lein run -m nsq-tail`).
 - Update ready state after messages are processed
 - Handle more than one connection, round-robin between them
 - Publishing
+- Polling nsqlookups
 
 ## License
 
