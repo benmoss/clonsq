@@ -21,9 +21,8 @@
 
 (defn response-handler [sink msg]
   (condp = (:body msg)
-    "_heartbeat_" (do (s/put! sink (proto/encode :nop))
-                      (prn "heartbeat" msg))
-    "OK" (prn "OK", msg)
+    "_heartbeat_"  (s/put! sink (proto/encode :nop))
+    "OK" nil
     (prn "Unexpected message" msg)))
 
 (defn subscribe-handlers [{:keys [sink response message error] :as stream}]
@@ -41,18 +40,19 @@
 (defn finish [msg conn]
   (s/put! conn (proto/encode :fin (:id msg))))
 
+(defn close! [consumer]
+  (doseq [conn (:connections consumer)]
+    (s/put! conn (proto/encode :close))
+    (s/close! conn)))
+
 (comment
   (defn handler [conn msg]
     (prn msg)
     (finish msg conn))
 
-  (def conn (connect {:lookupd-http-address "http://localhost:4161"
-                      :topic "test"
-                      :channel "test"
-                      :max-in-flight 200
-                      :handler handler}))
-  (doseq [c (:connections conn)]
-    (s/put! c "CLS\n")
-    (s/close! c))
-
+  (def consumer (connect {:lookupd-http-address "http://localhost:4161"
+                          :topic "test"
+                          :channel "test"
+                          :max-in-flight 200
+                          :handler handler}))
   )

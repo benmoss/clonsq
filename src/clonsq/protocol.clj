@@ -32,6 +32,7 @@
 
 (defmulti encode (fn [cmd & more] cmd))
 (defmethod encode :nop [_] "NOP\n")
+(defmethod encode :close [_] (str "CLS" "\n"))
 (defmethod encode :fin [_ id] (str "FIN " id "\n"))
 (defmethod encode :req [_ id] (str "REQ " id "\n"))
 (defmethod encode :magic-id [_] "  V2")
