@@ -10,7 +10,6 @@ can be run via Leiningen (`lein run -m nsq-tail`).
 ## TODOS
 
 - Update ready state after messages are processed
-- Handle more than one connection, round-robin between them
 - Publishing
 - Polling nsqlookups
 

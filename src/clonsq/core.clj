@@ -4,6 +4,7 @@
             [byte-streams :as bs]
             [cheshire.core :as json]
             [clonsq.protocol :as proto]
+            [clonsq.consumer :as c]
             [manifold.deferred :as d]
             [manifold.stream :as s])
   (:import (io.netty.buffer ByteBuf)))
@@ -18,33 +19,40 @@
 (defn err-handler [msg]
   (prn "ERROR" msg))
 
-(defn response-handler [response-stream msg]
+(defn response-handler [sink msg]
   (condp = (:body msg)
-    "_heartbeat_" (do (s/put! response-stream (proto/encode :nop))
+    "_heartbeat_" (do (s/put! sink (proto/encode :nop))
                       (prn "heartbeat" msg))
     "OK" (prn "OK", msg)
     (prn "Unexpected message" msg)))
 
-(defn data-type= [t]
-  (fn [msg] (= t (:type msg))))
+(defn subscribe-handlers [{:keys [sink response message error] :as stream}]
+  (s/consume (partial response-handler sink) response)
+  (s/consume err-handler error)
+  (s/consume (partial handler sink) message))
 
-(defn connect [{:keys [lookupd-http-address topic channel max-in-flight handler]}]
-  (d/let-flow [lookup-response (lookup lookupd-http-address topic)
-               producer (get-in lookup-response ["data" "producers" 0])
-               tcp-stream (tcp/client {:host (get producer "broadcast_address")
-                                       :port (get producer "tcp_port")})
-               decoded-input-stream (proto/decode-stream tcp-stream)
-               responses (s/filter (data-type= :response) decoded-input-stream)
-               messages  (s/filter (data-type= :message) decoded-input-stream)
-               errors    (s/filter (data-type= :error) decoded-input-stream)]
-    (doto tcp-stream
-      (s/put! (proto/encode :magic-id))
-      (s/put! (proto/encode :subscribe topic channel))
-      (s/put! (proto/encode :ready max-in-flight)))
-    (s/consume (partial response-handler tcp-stream) responses)
-    (s/consume err-handler errors)
-    (s/consume (partial handler tcp-stream) messages)
-    tcp-stream))
+(defn connect [{:keys [lookupd-http-address topic handler] :as opts}]
+  (let [lookup-response @(lookup lookupd-http-address topic)
+        producers (get-in lookup-response ["data" "producers"])
+        consumer (c/create producers opts)]
+    (dorun (map subscribe-handlers (c/streams consumer)))
+    consumer))
 
 (defn finish [msg conn]
   (s/put! conn (proto/encode :fin (:id msg))))
+
+(comment
+  (defn handler [conn msg]
+    (prn msg)
+    (finish msg conn))
+
+  (def conn (connect {:lookupd-http-address "http://localhost:4161"
+                      :topic "test"
+                      :channel "test"
+                      :max-in-flight 200
+                      :handler handler}))
+  (doseq [c (:connections conn)]
+    (s/put! c "CLS\n")
+    (s/close! c))
+
+  )
