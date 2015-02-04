@@ -8,13 +8,21 @@
   (tcp/client {:host broadcast_address
                :port tcp_port}))
 
-(defn create [producers {:keys [topic channel max-in-flight]}]
-  (let [connections (map (comp deref tcp-client) producers)]
+(defn ->connection [stream]
+  {:streams (split-stream stream)
+   :rdy (atom 1)
+   :last-rdy (atom 1)})
+
+(defn create [producers {:keys [topic channel max-in-flight handler]}]
+  (let [connections (map (comp ->connection deref tcp-client) producers)]
     (doseq [conn connections]
-      (s/put! conn (proto/encode :magic-id))
-      (s/put! conn (proto/encode :subscribe topic channel))
-      (s/put! conn (proto/encode :ready max-in-flight)))
-    {:connections connections}))
+      (let [sink (get-in conn [:streams :sink])]
+        (s/put! sink (proto/encode :magic-id))
+        (s/put! sink (proto/encode :subscribe topic channel))
+        (s/put! sink (proto/encode :rdy @(:rdy conn)))))
+    {:connections (atom connections)
+     :max-in-flight (atom max-in-flight)
+     :handler handler}))
 
 (defn- substream [stream t]
   (s/filter #(= t (:type %)) stream))
@@ -25,6 +33,3 @@
      :response (substream decoded-stream :response)
      :message (substream decoded-stream :message)
      :error (substream decoded-stream :error)}))
-
-(defn streams [{:keys [connections] :as consumer}]
-  (map split-stream connections))

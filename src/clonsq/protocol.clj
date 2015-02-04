@@ -37,4 +37,4 @@
 (defmethod encode :req [_ id] (str "REQ " id "\n"))
 (defmethod encode :magic-id [_] "  V2")
 (defmethod encode :subscribe [_ topic channel] (string/join " " ["SUB" topic channel "\n"]))
-(defmethod encode :ready [_ n] (string/join " " ["RDY" n "\n"]))
+(defmethod encode :rdy [_ n] (string/join " " ["RDY" n "\n"]))

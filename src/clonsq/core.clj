@@ -25,23 +25,25 @@
     "OK" nil
     (prn "Unexpected message" msg)))
 
-(defn subscribe-handlers [{:keys [sink response message error] :as stream}]
-  (s/consume (partial response-handler sink) response)
-  (s/consume err-handler error)
-  (s/consume (partial handler sink) message))
+(defn subscribe-handlers [consumer]
+  (doseq [conn @(:connections consumer)]
+    (let [{:keys [sink error message response]} (:streams conn)]
+      (s/consume (partial response-handler sink) response)
+      (s/consume err-handler error)
+      (s/consume (partial (:handler consumer) sink) message))))
 
-(defn connect [{:keys [lookupd-http-address topic handler] :as opts}]
+(defn connect [{:keys [lookupd-http-address topic] :as opts}]
   (let [lookup-response @(lookup lookupd-http-address topic)
         producers (get-in lookup-response ["data" "producers"])
         consumer (c/create producers opts)]
-    (dorun (map subscribe-handlers (c/streams consumer)))
+    (subscribe-handlers consumer)
     consumer))
 
 (defn finish [msg conn]
   (s/put! conn (proto/encode :fin (:id msg))))
 
 (defn close! [consumer]
-  (doseq [conn (:connections consumer)]
+  (doseq [conn @(:connections consumer)]
     (s/put! conn (proto/encode :close))
     (s/close! conn)))
 
