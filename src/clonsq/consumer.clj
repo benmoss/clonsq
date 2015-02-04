@@ -8,6 +8,20 @@
   (tcp/client {:host broadcast_address
                :port tcp_port}))
 
+(defn per-conn-max-in-flight [{:keys [max-in-flight connections]}]
+  (let [conn-count (count @connections)]
+    (max (int (/ @max-in-flight conn-count)) 1)))
+
+(defn update-rdy [csmr {:keys [rdy last-rdy] :as conn}]
+  (let [current-rdy @rdy
+        current-last-rdy @last-rdy]
+    (swap! rdy dec)
+    (when (or (<= current-rdy 1)
+              (<= current-rdy (/ current-last-rdy 4)))
+      (let [new-rdy (per-conn-max-in-flight csmr)]
+        (reset! rdy new-rdy)
+        (reset! last-rdy new-rdy)))))
+
 (defn ->connection [stream]
   {:streams (split-stream stream)
    :rdy (atom 1)
