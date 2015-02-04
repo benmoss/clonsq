@@ -14,14 +14,25 @@
 
 (defn update-rdy [csmr {:keys [rdy last-rdy] :as conn} _]
   (let [current-rdy @rdy
-        current-last-rdy @last-rdy]
+        current-last-rdy @last-rdy
+        per-conn-max (per-conn-max-in-flight csmr) ]
     (swap! rdy dec)
     (when (or (<= current-rdy 1)
-              (<= current-rdy (/ current-last-rdy 4)))
-      (let [new-rdy (per-conn-max-in-flight csmr)]
-        (reset! rdy new-rdy)
-        (reset! last-rdy new-rdy)
-        (s/put! (get-in conn [:streams :sink]) (proto/encode :rdy new-rdy))))))
+              (<= current-rdy (/ current-last-rdy 4))
+              (< per-conn-max current-rdy))
+      (reset! rdy per-conn-max)
+      (reset! last-rdy per-conn-max)
+      (s/put! (get-in conn [:streams :sink]) (proto/encode :rdy per-conn-max)))))
+
+(defn- substream [stream t]
+  (s/filter #(= t (:type %)) stream))
+
+(defn split-stream [stream]
+  (let [decoded-stream (proto/decode-stream stream)]
+    {:sink (s/sink-only stream)
+     :response (substream decoded-stream :response)
+     :message (substream decoded-stream :message)
+     :error (substream decoded-stream :error)}))
 
 (defn ->connection [stream]
   {:streams (split-stream stream)
@@ -57,13 +68,3 @@
         (s/put! sink (proto/encode :subscribe topic channel))
         (s/put! sink (proto/encode :rdy @(:rdy conn)))))
     consumer))
-
-(defn- substream [stream t]
-  (s/filter #(= t (:type %)) stream))
-
-(defn split-stream [stream]
-  (let [decoded-stream (proto/decode-stream stream)]
-    {:sink (s/sink-only stream)
-     :response (substream decoded-stream :response)
-     :message (substream decoded-stream :message)
-     :error (substream decoded-stream :error)}))

@@ -9,7 +9,6 @@ can be run via Leiningen (`lein run -m nsq-tail`).
 
 ## TODOS
 
-- Update ready state after messages are processed
 - Publishing
 - Polling nsqlookups
 - IDENTIFY command

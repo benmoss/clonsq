@@ -15,8 +15,8 @@
   (nsq/connect {:lookupd-http-address lookupd-http-address
                 :topic topic
                 :channel channel
-                :max-in-flight max-in-flight
-                :handler (partial handler total-messages)}))
+                :max-in-flight (Integer/parseInt max-in-flight)
+                :handler (partial handler (Integer/parseInt total-messages))}))
 
 (defn normalize-args [args]
   (zipmap (map #(keyword (clojure.string/replace % #"--" ""))
@@ -26,8 +26,8 @@
 (defn -main [& args]
   (let [args (apply hash-map args)
         required-args ["--topic" "--lookupd-http-address"]
-        default-args {"--max-in-flight" 200
-                      "--total-messages" 0}
+        default-args {"--max-in-flight" "200"
+                      "--total-messages" "0"}
         normalized (->> args
                         (merge default-args)
                         normalize-args)]
