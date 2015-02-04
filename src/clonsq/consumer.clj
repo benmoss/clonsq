@@ -20,7 +20,8 @@
               (<= current-rdy (/ current-last-rdy 4)))
       (let [new-rdy (per-conn-max-in-flight csmr)]
         (reset! rdy new-rdy)
-        (reset! last-rdy new-rdy)))))
+        (reset! last-rdy new-rdy)
+        (s/put! (get-in conn [:streams :sink]) (proto/encode :rdy new-rdy))))))
 
 (defn ->connection [stream]
   {:streams (split-stream stream)

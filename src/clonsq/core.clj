@@ -39,18 +39,19 @@
     (subscribe-handlers consumer)
     consumer))
 
-(defn finish [msg conn]
-  (s/put! conn (proto/encode :fin (:id msg))))
+(defn finish! [msg sink]
+  (s/put! sink (proto/encode :fin (:id msg))))
 
 (defn close! [consumer]
-  (doseq [conn @(:connections consumer)]
-    (s/put! conn (proto/encode :close))
-    (s/close! conn)))
+  (doseq [conn @(:connections consumer)
+          :let [streams (:streams conn)]]
+    (s/put! (:sink streams) (proto/encode :close))
+    (dorun (map #(s/close! %) (vals streams)))))
 
 (comment
-  (defn handler [conn msg]
+  (defn handler [sink msg]
     (prn msg)
-    (finish msg conn))
+    (finish! msg sink))
 
   (def consumer (connect {:lookupd-http-address "http://localhost:4161"
                           :topic "test"

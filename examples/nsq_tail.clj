@@ -6,7 +6,7 @@
 (defn handler [total-messages conn msg]
   (swap! messages-shown inc)
   (prn msg)
-  (nsq/finish msg conn)
+  (nsq/finish! msg conn)
   (when (and (> total-messages 0)
              (>= @messages-shown total-messages))
     (System/exit 0)))
