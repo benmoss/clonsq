@@ -12,7 +12,7 @@
   (let [conn-count (count @connections)]
     (max (int (/ @max-in-flight conn-count)) 1)))
 
-(defn update-rdy [csmr {:keys [rdy last-rdy] :as conn}]
+(defn update-rdy [csmr {:keys [rdy last-rdy] :as conn} _]
   (let [current-rdy @rdy
         current-last-rdy @last-rdy]
     (swap! rdy dec)
@@ -28,16 +28,35 @@
    :rdy (atom 1)
    :last-rdy (atom 1)})
 
+(defn err-handler [msg]
+  (prn "ERROR" msg))
+
+(defn response-handler [sink msg]
+  (condp = (:body msg)
+    "_heartbeat_"  (s/put! sink (proto/encode :nop))
+    "OK" nil
+    (prn "Unexpected message" msg)))
+
+(defn subscribe-handlers [consumer]
+  (doseq [conn @(:connections consumer)]
+    (let [{:keys [sink error message response]} (:streams conn)]
+      (s/consume (partial #'response-handler sink) response)
+      (s/consume #'err-handler error)
+      (s/consume (partial (:handler consumer) sink) message)
+      (s/consume (partial #'update-rdy consumer conn) message))))
+
 (defn create [producers {:keys [topic channel max-in-flight handler]}]
-  (let [connections (map (comp ->connection deref tcp-client) producers)]
+  (let [connections (map (comp ->connection deref tcp-client) producers)
+        consumer {:connections (atom connections)
+                  :max-in-flight (atom max-in-flight)
+                  :handler handler}]
+    (subscribe-handlers consumer)
     (doseq [conn connections]
       (let [sink (get-in conn [:streams :sink])]
         (s/put! sink (proto/encode :magic-id))
         (s/put! sink (proto/encode :subscribe topic channel))
         (s/put! sink (proto/encode :rdy @(:rdy conn)))))
-    {:connections (atom connections)
-     :max-in-flight (atom max-in-flight)
-     :handler handler}))
+    consumer))
 
 (defn- substream [stream t]
   (s/filter #(= t (:type %)) stream))
