@@ -10,9 +10,13 @@ can be run via Leiningen (`lein run -m nsq-tail`).
 ## TODOS
 
 - Publishing
+- Multiple nsqlookups
+- Direct connections
 - Polling nsqlookups
 - IDENTIFY command
 - Backoff
+- REQ / TOUCH
+- Jitter
 - TLS
 - Sampling
 - AUTH
