@@ -17,6 +17,7 @@ can be run via Leiningen (`lein run -m nsq-tail`).
 - Sampling
 - AUTH
 - Snappy compression
+- Handle `max_in_flight < num_conns` scenario
 
 ## License
 
