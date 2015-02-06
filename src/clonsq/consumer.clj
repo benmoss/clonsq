@@ -47,9 +47,14 @@
     "OK" nil
     (prn "Unexpected message" msg)))
 
+(defn on-closed [consumer connection]
+  (prn "lost connection")
+  (swap! (:connections consumer) disj connection))
+
 (defn subscribe-handlers [consumer]
   (doseq [conn @(:connections consumer)]
     (let [{:keys [sink error message response]} (:streams conn)]
+      (s/on-closed sink (partial on-closed consumer conn))
       (s/consume (partial #'response-handler sink) response)
       (s/consume #'err-handler error)
       (s/consume (partial (:handler consumer) sink) message)
@@ -57,7 +62,7 @@
 
 (defn create [producers {:keys [topic channel max-in-flight handler]}]
   (let [connections (map (comp ->connection deref tcp-client) producers)
-        consumer {:connections (atom connections)
+        consumer {:connections (atom (set connections))
                   :max-in-flight (atom max-in-flight)
                   :handler handler}]
     (subscribe-handlers consumer)
