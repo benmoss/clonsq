@@ -7,7 +7,7 @@
 (defn handler [total-messages conn msg]
   (swap! messages-shown inc)
   (println (bs/to-string (:body msg)))
-  (nsq/finish! msg conn)
+  (nsq/finish! conn (:id msg))
   (when (and (> total-messages 0)
              (>= @messages-shown total-messages))
     (System/exit 0)))

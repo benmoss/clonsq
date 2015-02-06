@@ -20,8 +20,8 @@
         consumer (c/create producers opts)]
     consumer))
 
-(defn finish! [msg sink]
-  (s/put! sink (proto/encode :fin (:id msg))))
+(defn finish! [sink id]
+  (s/put! sink (proto/encode :fin id)))
 
 (defn close! [consumer]
   (doseq [conn @(:connections consumer)
@@ -31,7 +31,7 @@
 
 (comment
   (defn handler [sink msg]
-    (finish! msg sink))
+    (finish! sink (:id msg)))
 
   (def consumer (connect {:lookupd-http-address "http://localhost:4161"
                           :topic "test"
