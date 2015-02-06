@@ -2,7 +2,8 @@
   (:require [clojure.string :as string]
             [gloss.core :refer [defcodec enum finite-frame header ordered-map
                                 string]]
-            [gloss.io :as io]))
+            [gloss.data.bytes :refer [dup-bytes]]
+            [gloss.io :as io :refer [contiguous to-buf-seq]]))
 
 (defcodec frame-types (enum :int32 {:response 0 :error 1 :message 2}))
 
@@ -12,11 +13,22 @@
 (defcodec error (ordered-map :type :error
                              :body (string :utf8)))
 
+(def identity-codec
+  (reify
+    gloss.core.protocols.Reader
+    (read-bytes [_ b]
+      [true (contiguous (dup-bytes b)) nil])
+    gloss.core.protocols.Writer
+    (sizeof [_]
+      nil)
+    (write-bytes [_ _ b]
+      (-> b to-buf-seq dup-bytes))))
+
 (defcodec message (ordered-map :type :message
                                :timestamp :int64
                                :attempts :uint16
                                :id (string :ascii :length 16)
-                               :body (string :utf8)))
+                               :body identity-codec))
 
 ; http://nsq.io/clients/tcp_protocol_spec.html
 (defcodec main

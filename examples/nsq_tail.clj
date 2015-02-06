@@ -1,17 +1,19 @@
 (ns nsq-tail
-  (:require [clonsq.core :as nsq]))
+  (:require [byte-streams :as bs]
+            [clonsq.core :as nsq]))
 
 (def messages-shown (atom 0))
 
 (defn handler [total-messages conn msg]
   (swap! messages-shown inc)
-  (.println *out* msg)
+  (println (bs/to-string (:body msg)))
   (nsq/finish! msg conn)
   (when (and (> total-messages 0)
              (>= @messages-shown total-messages))
     (System/exit 0)))
 
 (defn run [{:keys [lookupd-http-address topic channel max-in-flight total-messages]}]
+  (println (str "Connecting to nsqds.."))
   (nsq/connect {:lookupd-http-address lookupd-http-address
                 :topic topic
                 :channel channel

@@ -1,7 +1,6 @@
 (ns clonsq.consumer
   (:require [aleph.tcp :as tcp]
             [clonsq.protocol :as proto]
-            [manifold.deferred :as d]
             [manifold.stream :as s]))
 
 (defn tcp-client [{:strs [broadcast_address tcp_port]}]

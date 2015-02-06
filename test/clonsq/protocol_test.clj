@@ -4,13 +4,19 @@
             [clonsq.protocol :as proto]
             [manifold.stream :as s]))
 
+(defn body->string [msg-seq]
+  (map (fn [{body :body :as msg}]
+         (assoc msg :body (bs/to-string body)))
+       msg-seq))
+
 (deftest decode
   (testing "Decoding a channel containing a message"
     (let [bytes [0 0 0 41 0 0 0 2 19 -66 -113 100 -42 -127 -120 -28 0 1 48 55 99 57 100 54 55 100 101 49 97 57 98 55 101 57 104 101 108 108 111 32 119 111 114 108 100]
           stream (s/->source [(byte-array bytes)])]
       (is (= (-> stream
                  proto/decode-stream
-                 s/stream->seq)
+                 s/stream->seq
+                 body->string)
              '({:body "hello world",
                 :id "07c9d67de1a9b7e9",
                 :attempts 1,
@@ -23,5 +29,6 @@
       (is (= (->> stream
                  proto/decode-stream
                  s/stream->seq
+                 body->string
                  (map :body))
              '("hello world" "bye world")))))))

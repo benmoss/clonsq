@@ -1,13 +1,11 @@
 (ns clonsq.core
   (:require [aleph.http :as http]
-            [aleph.tcp :as tcp]
             [byte-streams :as bs]
             [cheshire.core :as json]
-            [clonsq.protocol :as proto]
             [clonsq.consumer :as c]
+            [clonsq.protocol :as proto]
             [manifold.deferred :as d]
-            [manifold.stream :as s])
-  (:import (io.netty.buffer ByteBuf)))
+            [manifold.stream :as s]))
 
 
 (defn lookup [lookupd-host topic]
