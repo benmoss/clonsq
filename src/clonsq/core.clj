@@ -15,8 +15,11 @@
            json/parse-string))
 
 (defn connect [{:keys [lookupd-http-address topic] :as opts}]
-  (let [lookup-response @(lookup lookupd-http-address topic)
-        producers (get-in lookup-response ["data" "producers"])
+  (let [addresses (if (sequential? lookupd-http-address)
+                    lookupd-http-address
+                    (list lookupd-http-address))
+        responses @(apply d/zip (map #(lookup % topic) addresses))
+        producers (mapcat #(get-in % ["data" "producers"]) responses)
         consumer (c/create producers opts)]
     consumer))
 
@@ -33,7 +36,8 @@
   (defn handler [sink msg]
     (finish! sink (:id msg)))
 
-  (def consumer (connect {:lookupd-http-address "http://localhost:4161"
+  (def consumer (connect {:lookupd-http-address ["http://localhost:4161"
+                                                 "http://localhost:5161"]
                           :topic "test"
                           :channel "test"
                           :max-in-flight 200

@@ -10,7 +10,6 @@ can be run via Leiningen (`lein run -m nsq-tail`).
 ## TODOS
 
 - Publishing
-- Multiple nsqlookups
 - Direct connections
 - Polling nsqlookups
 - IDENTIFY command
@@ -22,6 +21,7 @@ can be run via Leiningen (`lein run -m nsq-tail`).
 - AUTH
 - Snappy compression
 - Handle `max_in_flight < num_conns` scenario
+- Handle consumer connection timeouts
 
 ## License
 

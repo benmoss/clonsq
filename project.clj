@@ -7,5 +7,6 @@
                  [aleph "0.4.0-beta1"]
                  [cheshire "5.4.0"]
                  [gloss "0.2.4"]]
-   :profiles {:dev {:resource-paths ["examples"]}}
+   :profiles {:dev {:resource-paths ["examples"]
+                    :dependencies [[org.clojure/tools.cli "0.3.1"]]}}
    :repl-options {:init-ns clonsq.core})

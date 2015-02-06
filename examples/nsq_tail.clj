@@ -1,8 +1,14 @@
 (ns nsq-tail
   (:require [byte-streams :as bs]
+            [clojure.string :as string]
+            [clojure.tools.cli :refer [parse-opts]]
             [clonsq.core :as nsq]))
 
 (def messages-shown (atom 0))
+
+(defn exit [status msg]
+  (println msg)
+  (System/exit status))
 
 (defn handler [total-messages conn msg]
   (swap! messages-shown inc)
@@ -10,7 +16,7 @@
   (nsq/finish! conn (:id msg))
   (when (and (> total-messages 0)
              (>= @messages-shown total-messages))
-    (System/exit 0)))
+    (exit 0 "--total-messages reached")))
 
 (defn run [{:keys [lookupd-http-address topic channel max-in-flight total-messages]}]
   (println (str "Connecting to nsqds.."))
@@ -20,21 +26,43 @@
                 :max-in-flight (Integer/parseInt max-in-flight)
                 :handler (partial handler (Integer/parseInt total-messages))}))
 
-(defn normalize-args [args]
-  (zipmap (map #(keyword (clojure.string/replace % #"--" ""))
-               (keys args))
-          (vals args)))
+;;;; cli setup ;;;;
+
+(def cli-options
+  (let [parse-int #(Integer/parseInt %)]
+    [["-t" "--topic TOPIC" "(required) NSQ topic"]
+     ["-m" "--max-in-flight COUNT" "max number of messages to allow in flight"
+      :default 200
+      :parse-fn parse-int]
+     ["-l" "--lookupd-http-address ADDRESS" "(required) lookupd HTTP address (may be given multiple times)"
+      :default []
+      :default-desc ""
+      :assoc-fn (fn [m k v] (assoc m k (conj (k m) v)))]
+     ["-n" "--total-messages COUNT" "total messages to show (will wait if starved)"
+      :default 0
+      :parse-fn parse-int]
+     ["-c" "--channel CHANNEL" "NSQ channel"
+      :default (str "nsq-tail" (-> (Math/random) (* 100000) int) "#ephemeral")]
+     ["-h" "--help"]]))
+
+(def required-options
+  #{:topic :lookupd-http-address})
+
+(defn missing-opts [opts]
+  (into {} (filter (fn [[k v]] (and (required-options k)
+                                    (not (seq v))))
+          opts)))
+
+(defn error-msg [errors summary]
+  (str "The following required fields were missing:\n\n"
+       (string/join \newline (keys errors))
+       "\n\nUsage:\n\n"
+       summary))
 
 (defn -main [& args]
-  (let [args (apply hash-map args)
-        required-args ["--topic" "--lookupd-http-address"]
-        default-args {"--max-in-flight" "200"
-                      "--total-messages" "0"}
-        normalized (->> args
-                        (merge default-args)
-                        normalize-args)]
-    (when-let [missing-args (seq (remove (partial contains? args) required-args))]
-      (doseq [arg-name missing-args]
-        (println (str arg-name " is required")))
-      (System/exit 1))
-    (run normalized)))
+  (let [{:keys [options arguments summary errors]} (parse-opts args cli-options)
+        missing (missing-opts options)]
+    (cond
+     (:help options) (exit 0 summary)
+     (seq missing) (exit 1 (error-msg missing summary)))
+    (run options)))
