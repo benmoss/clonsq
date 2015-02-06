@@ -3,10 +3,6 @@
             [clonsq.protocol :as proto]
             [manifold.stream :as s]))
 
-(defn tcp-client [{:strs [broadcast_address tcp_port]}]
-  (tcp/client {:host broadcast_address
-               :port tcp_port}))
-
 (defn per-conn-max-in-flight [{:keys [max-in-flight connections]}]
   (let [conn-count (count @connections)]
     (max (int (/ @max-in-flight conn-count)) 1)))
@@ -33,10 +29,14 @@
      :message (substream decoded-stream :message)
      :error (substream decoded-stream :error)}))
 
-(defn ->connection [stream]
-  {:streams (split-stream stream)
-   :rdy (atom 1)
-   :last-rdy (atom 1)})
+(defn producer->connection [{:strs [broadcast_address tcp_port]}]
+  (let [client @(tcp/client {:host broadcast_address
+                             :port tcp_port})]
+    {:streams (split-stream client)
+     :rdy (atom 1)
+     :last-rdy (atom 1)
+     :broadcast-address broadcast_address
+     :port tcp_port}))
 
 (defn err-handler [msg]
   (prn "ERROR" msg))
@@ -48,7 +48,8 @@
     (prn "Unexpected message" msg)))
 
 (defn on-closed [consumer connection]
-  (prn "lost connection")
+  (println (str "lost connection to "
+                (:broadcast-address connection) ":" (:port connection)))
   (swap! (:connections consumer) disj connection))
 
 (defn subscribe-handlers [consumer]
@@ -61,7 +62,7 @@
       (s/consume (partial #'update-rdy consumer conn) message))))
 
 (defn create [producers {:keys [topic channel max-in-flight handler]}]
-  (let [connections (map (comp ->connection deref tcp-client) producers)
+  (let [connections (map producer->connection producers)
         consumer {:connections (atom (set connections))
                   :max-in-flight (atom max-in-flight)
                   :handler handler}]
