@@ -5,23 +5,36 @@
             [clonsq.consumer :as c]
             [clonsq.protocol :as proto]
             [manifold.deferred :as d]
-            [manifold.stream :as s]))
+            [manifold.stream :as s])
+  (:import (java.util.concurrent TimeoutException)))
 
+(defn lookup [topic lookupd-host]
+  (let [lookupd-address (str lookupd-host "/lookup?topic=" topic)]
+    (-> (d/timeout! (http/get lookupd-address) 200)
+        (d/chain :body
+                 bs/to-string
+                 json/parse-string)
+        (d/catch TimeoutException
+          (fn [e] {:error e :address lookupd-address})))))
 
-(defn lookup [lookupd-host topic]
-  (d/chain (http/get (str lookupd-host "/lookup?topic=" topic))
-           :body
-           bs/to-string
-           json/parse-string))
+(defn print-errors [errors]
+  (doseq [e errors]
+    (println (format "error querying nsqlookupd (%s)"
+                     (:address e) (:error e)))))
 
 (defn connect [{:keys [lookupd-http-address topic] :as opts}]
   (let [addresses (if (sequential? lookupd-http-address)
                     lookupd-http-address
                     (list lookupd-http-address))
-        responses @(apply d/zip (map #(lookup % topic) addresses))
-        producers (mapcat #(get-in % ["data" "producers"]) responses)
-        consumer (c/create producers opts)]
-    consumer))
+        {errors true
+         responses false} (->> addresses
+                               (map (partial lookup topic))
+                               (apply d/zip)
+                               deref
+                               (group-by #(contains? % :error)))
+        producers (mapcat #(get-in % ["data" "producers"]) responses)]
+    (print-errors errors)
+    (c/create producers opts)))
 
 (defn finish! [sink id]
   (s/put! sink (proto/encode :fin id)))
