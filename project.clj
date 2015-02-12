@@ -8,5 +8,6 @@
                  [cheshire "5.4.0"]
                  [gloss "0.2.4"]]
    :profiles {:dev {:resource-paths ["examples"]
-                    :dependencies [[org.clojure/tools.cli "0.3.1"]]}}
+                    :dependencies [[org.clojure/tools.cli "0.3.1"]
+                                   [me.raynes/conch "0.8.0"]]}}
    :repl-options {:init-ns clonsq.core})
