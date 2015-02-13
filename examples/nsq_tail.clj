@@ -2,7 +2,7 @@
   (:require [byte-streams :as bs]
             [clojure.string :as string]
             [clojure.tools.cli :refer [parse-opts]]
-            [clonsq.core :as nsq]))
+            [clonsq.consumer :as consumer]))
 
 (def messages-shown (atom 0))
 
@@ -13,18 +13,18 @@
 (defn handler [total-messages conn msg]
   (swap! messages-shown inc)
   (println (bs/to-string (:body msg)))
-  (nsq/finish! conn (:id msg))
+  (consumer/finish! conn (:id msg))
   (when (and (> total-messages 0)
              (>= @messages-shown total-messages))
     (exit 0 "--total-messages reached")))
 
 (defn run [{:keys [lookupd-http-address topic channel max-in-flight total-messages]}]
   (println (str "Connecting to nsqds.."))
-  (nsq/connect {:lookupd-http-address lookupd-http-address
-                :topic topic
-                :channel channel
-                :max-in-flight (Integer/parseInt max-in-flight)
-                :handler (partial handler (Integer/parseInt total-messages))}))
+  (consumer/create {:lookupd-http-address lookupd-http-address
+                    :topic topic
+                    :channel channel
+                    :max-in-flight (Integer/parseInt max-in-flight)
+                    :handler (partial handler (Integer/parseInt total-messages))}))
 
 ;;;; cli setup ;;;;
 
@@ -51,7 +51,7 @@
 (defn missing-opts [opts]
   (into {} (filter (fn [[k v]] (and (required-options k)
                                     (not (seq v))))
-          opts)))
+                   opts)))
 
 (defn error-msg [errors summary]
   (str "The following required fields were missing:\n\n"
@@ -63,6 +63,6 @@
   (let [{:keys [options arguments summary errors]} (parse-opts args cli-options)
         missing (missing-opts options)]
     (cond
-     (:help options) (exit 0 summary)
-     (seq missing) (exit 1 (error-msg missing summary)))
+      (:help options) (exit 0 summary)
+      (seq missing) (exit 1 (error-msg missing summary)))
     (run options)))

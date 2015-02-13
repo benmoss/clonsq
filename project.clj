@@ -6,8 +6,8 @@
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [aleph "0.4.0-beta1"]
                  [cheshire "5.4.0"]
-                 [gloss "0.2.4"]]
+                 [gloss "0.2.4"]
+                 [prismatic/plumbing "0.3.7"]]
    :profiles {:dev {:resource-paths ["examples"]
                     :dependencies [[org.clojure/tools.cli "0.3.1"]
-                                   [me.raynes/conch "0.8.0"]]}}
-   :repl-options {:init-ns clonsq.core})
+                                   [me.raynes/conch "0.8.0"]]}})

@@ -1,9 +1,15 @@
 (ns clonsq.consumer
-  (:require [aleph.tcp :as tcp]
+  (:require [aleph.http :as http]
+            [aleph.tcp :as tcp]
+            [byte-streams :as bs]
+            [cheshire.core :as json]
             [clonsq.protocol :as proto]
-            [manifold.stream :as s]))
+            [manifold.deferred :as d]
+            [manifold.stream :as s]
+            [plumbing.core :refer [defnk]])
+  (:import (java.util.concurrent TimeoutException)))
 
-(defn per-conn-max-in-flight [{:keys [max-in-flight connections]}]
+(defnk per-conn-max-in-flight [max-in-flight connections]
   (let [conn-count (count @connections)]
     (max (int (/ @max-in-flight conn-count)) 1)))
 
@@ -22,7 +28,7 @@
 (defn- substream [stream t]
   (s/filter #(= t (:type %)) stream))
 
-(defn split-stream [stream]
+(defn- split-stream [stream]
   (let [decoded-stream (proto/decode-stream stream)]
     {:sink (s/sink-only stream)
      :response (substream decoded-stream :response)
@@ -61,11 +67,36 @@
       (s/consume (partial (:handler consumer) sink) message)
       (s/consume (partial #'update-rdy consumer conn) message))))
 
-(defn create [producers {:keys [topic channel max-in-flight handler]}]
-  (let [connections (map producer->connection producers)
+(defn lookup [topic lookupd-host]
+  (let [lookupd-address (str lookupd-host "/lookup?topic=" topic)]
+    (-> (d/timeout! (http/get lookupd-address) 200)
+        (d/chain :body
+                 bs/to-string
+                 json/parse-string)
+        (d/catch TimeoutException
+          (fn [e] {:error e :address lookupd-address})))))
+
+(defn print-errors [errors]
+  (doseq [e errors]
+    (println (format "error querying nsqlookupd (%s)"
+                     (:address e) (:error e)))))
+
+(defnk create [lookupd-http-address topic channel max-in-flight handler]
+  (let [addresses (if (sequential? lookupd-http-address)
+                    lookupd-http-address
+                    (list lookupd-http-address))
+        {errors true
+         responses false} (->> addresses
+                               (map (partial lookup topic))
+                               (apply d/zip)
+                               deref
+                               (group-by #(contains? % :error)))
+        producers (mapcat #(get-in % ["data" "producers"]) responses)
+        connections (map producer->connection producers)
         consumer {:connections (atom (set connections))
                   :max-in-flight (atom max-in-flight)
                   :handler handler}]
+    (print-errors errors)
     (subscribe-handlers consumer)
     (doseq [conn connections]
       (let [sink (get-in conn [:streams :sink])]
@@ -73,3 +104,24 @@
         (s/put! sink (proto/encode :subscribe topic channel))
         (s/put! sink (proto/encode :rdy @(:rdy conn)))))
     consumer))
+
+(defn finish! [sink id]
+  (s/put! sink (proto/encode :fin id)))
+
+(defn close! [consumer]
+  (doseq [conn @(:connections consumer)
+          :let [streams (:streams conn)]]
+    (s/put! (:sink streams) (proto/encode :close))
+    (dorun (map #(s/close! %) (vals streams)))))
+
+(comment
+  (defn handler [sink msg]
+    (finish! sink (:id msg)))
+
+  (def consumer (create {:lookupd-http-address ["http://localhost:4161"
+                                                "http://localhost:5161"]
+                         :topic "test"
+                         :channel "test"
+                         :max-in-flight 200
+                         :handler #'handler}))
+  )
