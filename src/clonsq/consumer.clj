@@ -13,10 +13,10 @@
   (let [conn-count (count @connections)]
     (max (int (/ @max-in-flight conn-count)) 1)))
 
-(defn update-rdy [csmr {:keys [rdy last-rdy] :as conn} _]
+(defn update-rdy [consumer {:keys [rdy last-rdy] :as conn} _]
   (let [current-rdy @rdy
         current-last-rdy @last-rdy
-        per-conn-max (per-conn-max-in-flight csmr) ]
+        per-conn-max (per-conn-max-in-flight consumer) ]
     (swap! rdy dec)
     (when (or (<= current-rdy 1)
               (<= current-rdy (/ current-last-rdy 4))
@@ -35,14 +35,11 @@
      :message (substream decoded-stream :message)
      :error (substream decoded-stream :error)}))
 
-(defn producer->connection [{:strs [broadcast_address tcp_port]}]
-  (let [client @(tcp/client {:host broadcast_address
-                             :port tcp_port})]
+(defn producer->connection [producer]
+  (let [client @(tcp/client producer)]
     {:streams (split-stream client)
      :rdy (atom 1)
-     :last-rdy (atom 1)
-     :broadcast-address broadcast_address
-     :port tcp_port}))
+     :last-rdy (atom 1)}))
 
 (defn err-handler [msg]
   (prn "ERROR" msg))
@@ -53,15 +50,15 @@
     "OK" nil
     (prn "Unexpected message" msg)))
 
-(defn on-closed [consumer connection]
+(defn on-closed [consumer producer]
   (println (str "lost connection to "
-                (:broadcast-address connection) ":" (:port connection)))
-  (swap! (:connections consumer) disj connection))
+                (:host producer) ":" (:port producer)))
+  (swap! (:connections consumer) dissoc producer))
 
 (defn subscribe-handlers [consumer]
-  (doseq [conn @(:connections consumer)]
+  (doseq [[producer conn] @(:connections consumer)]
     (let [{:keys [sink error message response]} (:streams conn)]
-      (s/on-closed sink (partial on-closed consumer conn))
+      (s/on-closed sink (partial on-closed consumer producer))
       (s/consume (partial #'response-handler sink) response)
       (s/consume #'err-handler error)
       (s/consume (partial (:handler consumer) sink) message)
@@ -81,6 +78,13 @@
     (println (format "error querying nsqlookupd (%s)"
                      (:address e) (:error e)))))
 
+(defn responses->producers [responses]
+  (->> (filter #(get % "data") responses)
+       (mapcat #(get-in % ["data" "producers"]))
+       (map (fn [{:strs [broadcast_address tcp_port]}]
+              {:host broadcast_address
+               :port tcp_port} ))))
+
 (defnk create [lookupd-http-address topic channel max-in-flight handler]
   (let [addresses (if (sequential? lookupd-http-address)
                     lookupd-http-address
@@ -91,14 +95,14 @@
                                (apply d/zip)
                                deref
                                (group-by #(contains? % :error)))
-        producers (mapcat #(get-in % ["data" "producers"]) responses)
-        connections (map producer->connection producers)
-        consumer {:connections (atom (set connections))
+        producers (responses->producers responses)
+        connections (zipmap producers (map producer->connection producers))
+        consumer {:connections (atom connections)
                   :max-in-flight (atom max-in-flight)
                   :handler handler}]
     (print-errors errors)
     (subscribe-handlers consumer)
-    (doseq [conn connections]
+    (doseq [conn (vals connections)]
       (let [sink (get-in conn [:streams :sink])]
         (s/put! sink (proto/encode :magic-id))
         (s/put! sink (proto/encode :subscribe topic channel))
@@ -109,7 +113,7 @@
   (s/put! sink (proto/encode :fin id)))
 
 (defn close! [consumer]
-  (doseq [conn @(:connections consumer)
+  (doseq [conn (vals @(:connections consumer))
           :let [streams (:streams conn)]]
     (s/put! (:sink streams) (proto/encode :close))
     (dorun (map #(s/close! %) (vals streams)))))
@@ -118,10 +122,11 @@
   (defn handler [sink msg]
     (finish! sink (:id msg)))
 
-  (def consumer (create {:lookupd-http-address ["http://localhost:4161"
-                                                "http://localhost:5161"]
-                         :topic "test"
-                         :channel "test"
-                         :max-in-flight 200
-                         :handler #'handler}))
+  (defn make-consumer []
+    (def consumer (create {:lookupd-http-address ["http://localhost:4161"
+                                                  "http://localhost:5161"]
+                           :topic "test"
+                           :channel "test"
+                           :max-in-flight 200
+                           :handler #'handler})))
   )
