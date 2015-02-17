@@ -1,13 +1,9 @@
 (ns clonsq.test-utils
-  (:require [me.raynes.conch.low-level :as sh])
-  (:import (java.nio.file Files)
+  (:require [me.raynes.conch.low-level :as sh]
+            [plumbing.core :refer [defnk]])
+  (:import (java.io Closeable)
+           (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)))
-
-(defrecord NSQ [nsqd nsqlookupd]
-  java.io.Closeable
-  (close [this]
-    (sh/destroy nsqd)
-    (sh/destroy nsqlookupd)))
 
 (defn read-lines
   ([stream] (read-lines stream []))
@@ -26,25 +22,35 @@
   (when (not (re-find regex (first lines)))
     (recur (next lines) regex)))
 
-(defn create-nsq-procs []
+(defrecord Proc [proc]
+  Closeable
+  (close [_] (sh/destroy proc)))
+
+(defnk create-nsqlookupd [http-address tcp-address]
   (let [dir (str (Files/createTempDirectory "nsq-tests" (make-array FileAttribute 0)))
-        nsqlookupd (sh/proc "nsqlookupd"
-                            "--http-address=0.0.0.0:9161"
-                            "--tcp-address=0.0.0.0:9160"
-                            :dir dir)
-        nsqd (sh/proc "nsqd"
-                      "--http-address=0.0.0.0:9151"
-                      "--tcp-address=0.0.0.0:9150"
-                      "--lookupd-tcp-address=0.0.0.0:9160"
-                      :dir dir)
-        nsqlookupd-stderr (read-lines (:err nsqlookupd))
-        nsqd-stderr (read-lines (:err nsqd))
-        nsqs (->NSQ nsqd nsqlookupd)]
-    (try (wait-for-line nsqlookupd-stderr #"HTTP: listening")
-         (wait-for-line nsqd-stderr #"peer info")
-         nsqs
+        proc (->Proc (sh/proc "nsqlookupd"
+                              (str "--http-address=" http-address)
+                              (str "--tcp-address=" tcp-address)
+                              :dir dir))
+        stderr (read-lines (-> proc :proc :err))]
+    (try (wait-for-line stderr #"HTTP: listening")
          (catch AssertionError e
-           (future (dorun (map println nsqlookupd-stderr)))
-           (future (dorun (map println nsqd-stderr)))
-           (.close nsqs)
-           (throw (ex-info "nsq exited abruptly" {} e))))))
+           (.close proc)
+           (future (dorun (map println stderr)))
+           (throw (ex-info "nsqlookupd exited abruptly" {} e))))
+    proc))
+
+(defnk create-nsqd [http-address tcp-address lookupd-tcp-address]
+  (let [dir (str (Files/createTempDirectory "nsq-tests" (make-array FileAttribute 0)))
+        proc (->Proc (sh/proc "nsqd"
+                              (str "--http-address=" http-address)
+                              (str "--tcp-address=" tcp-address)
+                              (str "--lookupd-tcp-address=" lookupd-tcp-address)
+                              :dir dir))
+        stderr (read-lines (-> proc :proc :err))]
+    (try (wait-for-line stderr #"peer info")
+         (catch AssertionError e
+           (future (dorun (map println stderr)))
+           (.close proc)
+           (throw (ex-info "nsqd exited abruptly" {} e))))
+    proc))

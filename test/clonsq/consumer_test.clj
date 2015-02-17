@@ -53,14 +53,20 @@
            it is 1"
     (is (= (c/per-conn-max-in-flight {:max-in-flight (atom 1)
                                       :connections (atom (range 100))})
-           1))))
+           1)))
+  (testing "with no connections
+           it is max-in-flight"
+    (is (= (c/per-conn-max-in-flight {:max-in-flight (atom 10)
+                                      :connections (atom [])})
+           10))))
 
 (deftest connections-timeout
   (testing "connecting to a nonexistent nsqlookupd will timeout"
     (is (= "error querying nsqlookupd (http://0.0.0.0:9999/lookup?topic=foo)\n"
            (with-out-str
-             (c/create {:lookupd-http-address "http://0.0.0.0:9999"
+             (c/close! (c/create {:lookupd-http-address "http://0.0.0.0:9999"
                         :handler (fn [_ _])
                         :max-in-flight 200
+                        :lookupd-poll-interval 2000
                         :channel "foo"
-                        :topic "foo"}))))))
+                        :topic "foo"})))))))

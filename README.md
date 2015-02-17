@@ -11,7 +11,6 @@ can be run via Leiningen (`lein run -m nsq-tail`).
 
 - Publishing
 - Direct connections
-- Polling nsqlookups
 - IDENTIFY command
 - Backoff
 - REQ / TOUCH
