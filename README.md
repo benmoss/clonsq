@@ -1,6 +1,7 @@
-# clonsq
+# clonsq [![Build Status](https://travis-ci.org/benmoss/clonsq.svg?branch=master)](https://travis-ci.org/benmoss/clonsq)
 
 An in-progress Clojure client library for [NSQ](http://nsq.io/).
+
 
 ## Usage
 
