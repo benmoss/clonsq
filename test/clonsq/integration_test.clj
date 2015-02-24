@@ -15,7 +15,7 @@
 (def consumer-defaults
   {:lookupd-http-address (str "http://" (:http-address nsqlookupd-defaults))
    :topic "test"
-   :channel "test"
+   :channel "test#ephemeral"
    :max-in-flight 200
    :lookupd-poll-interval 1000
    :handler (fn [sink msg])})
