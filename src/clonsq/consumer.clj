@@ -3,11 +3,11 @@
             [aleph.tcp :as tcp]
             [byte-streams :as bs]
             [cheshire.core :as json]
+            [clojure.tools.logging :as log]
             [clonsq.protocol :as proto]
             [manifold.deferred :as d]
             [manifold.stream :as s]
-            [plumbing.core :refer [defnk letk]])
-  (:import (java.util.concurrent TimeoutException)))
+            [plumbing.core :refer [defnk letk]]))
 
 (defnk per-conn-max-in-flight [max-in-flight connections]
   (let [conn-count (count @connections)]
@@ -43,22 +43,21 @@
      :last-rdy (atom 1)}))
 
 (defn err-handler [msg]
-  (prn "ERROR" msg))
+  (log/fatal "ERROR" msg))
 
 (defn response-handler [sink msg]
   (condp = (:body msg)
     "_heartbeat_"  (s/put! sink (proto/encode :nop))
     "OK" nil
-    (prn "Unexpected message" msg)))
+    (log/fatal "Unexpected message" msg)))
 
 (defn remove-connection! [consumer producer]
-  (println (str "lost connection to "
-                (:host producer) ":" (:port producer)))
+  (log/debugf "lost connection to %s:%s" (:host producer) (:port producer))
   (swap! (:connections consumer) dissoc producer))
 
 (defn print-errors [errors]
   (doseq [e errors]
-    (println (format "error querying nsqlookupd (%s)" (:address e)))))
+    (log/errorf "error querying nsqlookupd (%s)" (:address e))))
 
 (defn responses->producers [responses]
   (->> (filter #(get % "data") responses)
@@ -86,7 +85,7 @@
   (doseq [producer (responses->producers responses)
           :when (not (get @connections producer))]
     (let [connection (create-connection! producer)]
-      (println (str "connected to " (:host producer) ":" (:port producer)))
+      (log/debugf "connected to %s:%s" (:host producer) (:port producer))
       (swap! connections assoc producer connection)
       (perform-handshake! connection consumer)
       (subscribe-handlers! producer connection consumer))))
