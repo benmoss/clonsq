@@ -11,6 +11,7 @@ can be run via Leiningen (`lein run -m nsq-tail`).
 ## TODOS
 
 - Publishing
+- Clean close (https://github.com/bitly/go-nsq/blob/596f98305c8f912a20bd54ee069ca13c8d84a012/conn.go#L593-L617)
 - Direct connections
 - IDENTIFY command
 - Backoff
