@@ -1,6 +1,7 @@
 (ns clonsq.consumer-test
   (:require [clojure.test :refer :all]
             [clonsq.consumer :as c]
+            [manifold.deferred :as d]
             [manifold.stream :as s]))
 
 (deftest rdy-maintenance
@@ -62,11 +63,7 @@
 
 (deftest connections-timeout
   (testing "connecting to a nonexistent nsqlookupd will timeout"
-    (is (= "error querying nsqlookupd (http://0.0.0.0:9999/lookup?topic=foo)\n"
-           (with-out-str
-             (c/close! (c/create {:lookupd-http-address "http://0.0.0.0:9999"
-                        :handler (fn [_ _])
-                        :max-in-flight 200
-                        :lookupd-poll-interval 2000
-                        :channel "foo"
-                        :topic "foo"})))))))
+    (with-redefs [aleph.http/get (constantly (d/deferred))]
+      (let [result @(c/lookup! "some-topic" "http://some.address")]
+        (is (= java.util.concurrent.TimeoutException (-> result :exception type)))
+        (is (= "http://some.address" (:address result)))))))

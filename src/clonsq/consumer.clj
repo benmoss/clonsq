@@ -96,14 +96,14 @@
         (d/chain :body
                  bs/to-string
                  json/parse-string)
-        (d/catch (fn [e] {:error e :address lookupd-address})))))
+        (d/catch (fn [e] {:exception e :address lookupd-host})))))
 
 (defn query-lookups! [lookupd-addresses topic]
   (->> lookupd-addresses
        (map (partial lookup! topic))
        (apply d/zip)
        deref
-       (group-by #(if (contains? % :error)
+       (group-by #(if (contains? % :exception)
                     :errors
                     :responses))))
 
