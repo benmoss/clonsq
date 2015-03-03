@@ -54,3 +54,7 @@
            (.close proc)
            (throw (ex-info "nsqd exited abruptly" {} e))))
     proc))
+
+(defn wait-for-lock
+  ([lock] (wait-for-lock lock 2000))
+  ([lock timeout] (assert (deref lock timeout false) "timeout")))

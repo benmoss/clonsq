@@ -2,7 +2,8 @@
   (:require [byte-streams :as bs]
             [clojure.test :refer [deftest is testing]]
             [clonsq.consumer :as consumer]
-            [clonsq.test-utils :refer [create-nsqd create-nsqlookupd]]
+            [clonsq.test-utils :refer [create-nsqd create-nsqlookupd
+                                       wait-for-lock]]
             [me.raynes.conch.low-level :as sh]))
 
 (def nsqlookupd-defaults {:http-address "0.0.0.0:9161"
@@ -33,9 +34,9 @@
                                              :handler (fn [sink msg]
                                                         (swap! results conj (bs/to-string (:body msg)))
                                                         (deliver lock true))))]
-        (is (deref lock 200 false) "timeout")
-        (is (= @results ["hello world"]))
-        (consumer/close! consumer)))))
+        (try (wait-for-lock lock)
+             (is (= @results ["hello world"]))
+             (finally (consumer/close! consumer)))))))
 
 (deftest polling-nsqlookupds
   (testing "a consumer will poll its nsqlookups for new publishers"
@@ -48,7 +49,7 @@
                                                         (deliver lock true))
                                              :lookupd-poll-interval 10))]
         (with-open [nsqd (create-nsqd nsqd-defaults)]
-          (is (= 0 (sh/exit-code (sh/proc "curl" "-dshibboleth" (str "http://" (:http-address nsqd-defaults) "/put?topic=test")))))
-          (is (deref lock 200 false) "timeout")
-          (is (= @results ["shibboleth"]))
-          (consumer/close! consumer))))))
+          (try (is (= 0 (sh/exit-code (sh/proc "curl" "-dshibboleth" (str "http://" (:http-address nsqd-defaults) "/put?topic=test")))))
+               (wait-for-lock lock)
+               (is (= @results ["shibboleth"]))
+               (finally (consumer/close! consumer))))))))
